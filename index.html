@@ -1,0 +1,1813 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Nico Settimana Bianca</title>
+    <style>
+        /* Reset e prevenzione scroll / selezione per esperienza mobile-first */
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #070b14;
+            color: #f8fafc;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Cornice verticale 9:16 centrata e responsiva */
+        #gameFrame {
+            position: relative;
+            width: min(100vw, calc(100vh * 9 / 16));
+            height: min(100vh, calc(100vw * 16 / 9));
+            overflow: hidden;
+            background-color: #1e293b;
+            box-shadow: 0 24px 72px rgba(0, 0, 0, 0.85), 0 0 0 2px rgba(148, 163, 184, 0.25);
+        }
+
+        @media (min-width: 640px) {
+            #gameFrame {
+                border-radius: 18px;
+                border: 3px solid #334155;
+            }
+        }
+
+        /* Pixel art nitida su griglia scalata senza anti-aliasing */
+        #pixelCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+            touch-action: manipulation;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* Controlli arcade pixelati */
+        .px-btn {
+            border: 3px solid #0f172a;
+            box-shadow: 0 4px 0 #0f172a;
+            border-radius: 10px;
+            font-family: inherit;
+            font-weight: 900;
+            cursor: pointer;
+            transition: transform 0.06s steps(2);
+        }
+
+        .px-btn:active {
+            transform: translateY(3px);
+            box-shadow: 0 1px 0 #0f172a;
+        }
+
+        .px-panel {
+            background: rgba(15, 23, 42, 0.92);
+            border: 3px solid #475569;
+            box-shadow: 0 6px 0 #090d16;
+            border-radius: 12px;
+        }
+
+        /* Pulsante Audio ON/OFF sempre accessibile in alto a destra */
+        #audioToggleBtn {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            z-index: 40;
+            padding: 8px 12px;
+            font-size: 12px;
+            letter-spacing: 0.04em;
+            background: #f8fafc;
+            color: #0f172a;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* Flash discreto ad ogni incremento +10 BPM */
+        @keyframes bpmFlashKey {
+            0% { opacity: 0.34; }
+            100% { opacity: 0; }
+        }
+
+        .bpm-flash-active {
+            animation: bpmFlashKey 0.42s steps(6) forwards;
+        }
+
+        /* Banner avviso +10 BPM */
+        @keyframes bpmBannerKey {
+            0% { opacity: 0; transform: translateY(-10px) scale(0.92); }
+            15% { opacity: 1; transform: translateY(0) scale(1.04); }
+            85% { opacity: 1; transform: translateY(0) scale(1); }
+            100% { opacity: 0; transform: translateY(-8px) scale(0.96); }
+        }
+
+        .bpm-banner-active {
+            animation: bpmBannerKey 1.15s steps(10) forwards;
+        }
+
+        /* Menu Principale: padding superiore ampio per evitare sovrapposizioni con il tasto Audio */
+        #menuOverlay {
+            position: absolute;
+            inset: 0;
+            z-index: 25;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 96px 16px 22px 16px;
+            background: linear-gradient(180deg, rgba(15, 23, 42, 0.34) 0%, rgba(15, 23, 42, 0.06) 48%, rgba(15, 23, 42, 0.78) 100%);
+            pointer-events: none;
+        }
+
+        .menu-header {
+            text-align: center;
+            pointer-events: none;
+        }
+
+        .menu-title {
+            margin: 0;
+            font-size: clamp(23px, 6.2vw, 33px);
+            line-height: 1.08;
+            font-weight: 900;
+            letter-spacing: 0.03em;
+            color: #ffffff;
+            text-shadow: 0 3px 0 #0f172a, 0 6px 14px rgba(0, 0, 0, 0.78);
+        }
+
+        .menu-badge {
+            display: inline-block;
+            margin-top: 10px;
+            padding: 6px 12px;
+            font-size: 12px;
+            font-weight: 900;
+            color: #fef08a;
+            background: rgba(15, 23, 42, 0.92);
+            border: 2px solid #eab308;
+            border-radius: 999px;
+            box-shadow: 0 3px 0 #090d16;
+        }
+
+        .menu-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: auto;
+        }
+
+        #playBtn {
+            width: 100%;
+            padding: 15px 16px;
+            font-size: 17px;
+            background: #fde047;
+            color: #0f172a;
+        }
+
+        #openLeaderboardMenuBtn {
+            width: 100%;
+            padding: 12px 16px;
+            font-size: 14px;
+            background: #1e293b;
+            color: #f8fafc;
+            border-color: #94a3b8;
+        }
+
+        /* HUD di gioco (Countdown + Playing) */
+        #hudOverlay {
+            position: absolute;
+            inset: 0;
+            z-index: 20;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 12px;
+            pointer-events: none;
+        }
+
+        .hud-top-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 6px;
+            padding-right: 106px;
+        }
+
+        .hud-box {
+            flex: 1;
+            min-width: 0;
+            padding: 7px 8px;
+            background: rgba(15, 23, 42, 0.88);
+            border: 2px solid #475569;
+            border-radius: 8px;
+            box-shadow: 0 3px 0 #090d16;
+        }
+
+        .hud-label {
+            font-size: 9px;
+            font-weight: 800;
+            text-transform: uppercase;
+            color: #94a3b8;
+            letter-spacing: 0.04em;
+        }
+
+        .hud-value {
+            margin-top: 2px;
+            font-size: 13px;
+            font-weight: 900;
+            color: #f8fafc;
+            white-space: nowrap;
+        }
+
+        .error-pips {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-top: 4px;
+        }
+
+        .error-pip {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+            border: 2px solid #0f172a;
+            background: #22c55e;
+        }
+
+        .error-pip.used {
+            background: #ef4444;
+        }
+
+        #bpmFlashOverlay {
+            position: absolute;
+            inset: 0;
+            z-index: 18;
+            background: #fef08a;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        #bpmBanner {
+            align-self: center;
+            margin-top: 12px;
+            padding: 7px 14px;
+            background: #facc15;
+            color: #0f172a;
+            border: 3px solid #0f172a;
+            border-radius: 999px;
+            font-size: 13px;
+            font-weight: 900;
+            box-shadow: 0 4px 0 #090d16;
+        }
+
+        #countdownCenter {
+            align-self: center;
+            margin: auto 0;
+            text-align: center;
+        }
+
+        #countdownText {
+            font-size: 64px;
+            font-weight: 900;
+            color: #ffffff;
+            text-shadow: 0 4px 0 #0f172a, 0 8px 18px rgba(0, 0, 0, 0.75);
+            line-height: 1;
+        }
+
+        #countdownSub {
+            display: inline-block;
+            margin-top: 8px;
+            padding: 4px 10px;
+            font-size: 11px;
+            font-weight: 800;
+            background: rgba(15, 23, 42, 0.9);
+            color: #fde047;
+            border: 2px solid #475569;
+            border-radius: 8px;
+        }
+
+        /* Barra del battito a zone temporali (Verde / Gialla / Rossa) */
+        #rhythmDock {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            pointer-events: auto;
+        }
+
+        #rhythmFeedback {
+            align-self: center;
+            padding: 3px 10px;
+            font-size: 11px;
+            font-weight: 900;
+            background: rgba(15, 23, 42, 0.92);
+            color: #e2e8f0;
+            border: 2px solid #475569;
+            border-radius: 999px;
+        }
+
+        #beatBar {
+            position: relative;
+            width: 100%;
+            height: 46px;
+            background: #0f172a;
+            border: 3px solid #64748b;
+            border-radius: 10px;
+            box-shadow: 0 4px 0 #090d16;
+            overflow: hidden;
+        }
+
+        #beatBar.error-flash {
+            border-color: #ef4444;
+        }
+
+        #beatZoneRedLeft,
+        #beatZoneRedRight {
+            position: absolute;
+            top: 3px;
+            bottom: 3px;
+            width: 14%;
+            background: rgba(239, 68, 68, 0.34);
+        }
+
+        #beatZoneRedLeft {
+            left: 16%;
+            border-left: 2px solid #f87171;
+        }
+
+        #beatZoneRedRight {
+            right: 16%;
+            border-right: 2px solid #f87171;
+        }
+
+        #beatZoneYellowLeft,
+        #beatZoneYellowRight {
+            position: absolute;
+            top: 3px;
+            bottom: 3px;
+            width: 11%;
+            background: rgba(250, 204, 21, 0.32);
+        }
+
+        #beatZoneYellowLeft {
+            left: 30%;
+            border-left: 2px solid #fde047;
+        }
+
+        #beatZoneYellowRight {
+            right: 30%;
+            border-right: 2px solid #fde047;
+        }
+
+        #beatTargetZone {
+            position: absolute;
+            top: 3px;
+            bottom: 3px;
+            left: 41%;
+            width: 18%;
+            background: rgba(34, 197, 94, 0.42);
+            border-left: 3px solid #4ade80;
+            border-right: 3px solid #4ade80;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 9px;
+            font-weight: 900;
+            color: #dcfce7;
+            letter-spacing: 0.04em;
+        }
+
+        .beat-impulse {
+            position: absolute;
+            top: 50%;
+            width: 14px;
+            height: 28px;
+            margin-left: -7px;
+            margin-top: -14px;
+            background: #38bdf8;
+            border: 2px solid #ffffff;
+            border-radius: 4px;
+            box-shadow: 0 0 8px rgba(56, 189, 248, 0.8);
+            pointer-events: none;
+        }
+
+        .beat-impulse.hit {
+            background: #4ade80;
+            border-color: #f0fdf4;
+        }
+
+        #beatMarkerLine {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 50%;
+            width: 3px;
+            margin-left: -1.5px;
+            background: #facc15;
+            pointer-events: none;
+        }
+
+        #tapActionBtn {
+            width: 100%;
+            padding: 14px 12px;
+            font-size: 15px;
+            letter-spacing: 0.03em;
+            background: #22c55e;
+            color: #052e16;
+        }
+
+        /* Modali Game Over e Classifica */
+        .modal-backdrop {
+            position: absolute;
+            inset: 0;
+            z-index: 35;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+            background: rgba(2, 6, 23, 0.78);
+        }
+
+        .modal-card {
+            width: 100%;
+            max-height: 88%;
+            display: flex;
+            flex-direction: column;
+            padding: 16px;
+            gap: 10px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+        }
+
+        .stat-cell {
+            background: rgba(30, 41, 59, 0.9);
+            border: 2px solid #475569;
+            border-radius: 8px;
+            padding: 8px 6px;
+            text-align: center;
+        }
+
+        .stat-cell-label {
+            font-size: 9px;
+            color: #94a3b8;
+            font-weight: 800;
+            text-transform: uppercase;
+        }
+
+        .stat-cell-val {
+            margin-top: 3px;
+            font-size: 13px;
+            font-weight: 900;
+            color: #fde047;
+        }
+
+        #leaderboardList {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            padding-right: 2px;
+        }
+
+        .lb-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 8px 10px;
+            border-radius: 8px;
+            background: rgba(30, 41, 59, 0.9);
+            border: 2px solid #334155;
+            font-size: 11px;
+        }
+
+        .lb-rank {
+            font-weight: 900;
+            color: #facc15;
+            min-width: 24px;
+        }
+
+        .lb-main {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .lb-score {
+            font-weight: 900;
+            color: #4ade80;
+            font-size: 12px;
+        }
+
+        .lb-meta {
+            color: #cbd5e1;
+            font-size: 10px;
+            margin-top: 2px;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameFrame">
+        <!-- Canvas in pixel art 9:16 -->
+        <canvas id="pixelCanvas"></canvas>
+
+        <!-- Flash discreto ad ogni incremento +10 BPM -->
+        <div id="bpmFlashOverlay"></div>
+
+        <!-- Pulsante Audio ON/OFF in alto a destra -->
+        <button id="audioToggleBtn" type="button" class="px-btn" aria-label="Attiva o disattiva audio">
+            <span id="audioIcon">🔊</span>
+            <span id="audioText">Audio ON</span>
+        </button>
+
+        <!-- Menu Principale -->
+        <div id="menuOverlay">
+            <div class="menu-header">
+                <h1 class="menu-title">Nico Settimana Bianca</h1>
+                <div class="menu-badge">pausa caffe è "Neve" in ufficio</div>
+            </div>
+
+            <div class="menu-actions">
+                <button id="playBtn" type="button" class="px-btn">❄️ Gioca con la neve</button>
+                <button id="openLeaderboardMenuBtn" type="button" class="px-btn">🏆 Classifica</button>
+            </div>
+        </div>
+
+        <!-- HUD di gioco (Countdown + Playing) -->
+        <div id="hudOverlay" class="hidden">
+            <div>
+                <div class="hud-top-row">
+                    <div class="hud-box">
+                        <div class="hud-label">Punti</div>
+                        <div id="hudScore" class="hud-value" style="color:#fde047;">0</div>
+                    </div>
+                    <div class="hud-box">
+                        <div class="hud-label">BPM</div>
+                        <div id="hudBpm" class="hud-value" style="color:#38bdf8;">50 BPM</div>
+                    </div>
+                    <div class="hud-box">
+                        <div class="hud-label">Errori</div>
+                        <div class="error-pips" aria-label="Errori commessi su 3 consentiti">
+                            <span id="pip1" class="error-pip"></span>
+                            <span id="pip2" class="error-pip"></span>
+                            <span id="pip3" class="error-pip"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="bpmBanner" class="hidden">
+                    💨 +10 BPM! <span id="bpmBannerVal">60 BPM</span>
+                </div>
+            </div>
+
+            <div id="countdownCenter" class="hidden">
+                <div id="countdownText">3</div>
+                <div id="countdownSub">Segui la linea bianca a tempo!</div>
+            </div>
+
+            <div id="rhythmDock" class="hidden">
+                <div id="rhythmFeedback">Verde = +300 • Giallo = +150 • Rosso = +50</div>
+                <div id="beatBar">
+                    <div id="beatZoneRedLeft"></div>
+                    <div id="beatZoneYellowLeft"></div>
+                    <div id="beatTargetZone">BATTITO</div>
+                    <div id="beatZoneYellowRight"></div>
+                    <div id="beatZoneRedRight"></div>
+                    <div id="beatMarkerLine"></div>
+                </div>
+                <button id="tapActionBtn" type="button" class="px-btn">BATTITO (SPAZIO / TAP)</button>
+            </div>
+        </div>
+
+        <!-- Schermata Game Over -->
+        <div id="gameOverModal" class="modal-backdrop hidden">
+            <div class="px-panel modal-card">
+                <div style="text-align:center;">
+                    <div style="font-size:11px;font-weight:900;color:#f87171;letter-spacing:0.06em;">GAME OVER</div>
+                    <h2 style="margin:4px 0 2px 0;font-size:19px;font-weight:900;">Fine corsa in ufficio</h2>
+                    <div id="gameOverReason" style="font-size:11px;color:#cbd5e1;">Hai commesso 3 errori a tempo.</div>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-cell">
+                        <div class="stat-cell-label">Punteggio</div>
+                        <div id="goScore" class="stat-cell-val">0</div>
+                    </div>
+                    <div class="stat-cell">
+                        <div class="stat-cell-label">BPM Max</div>
+                        <div id="goMaxBpm" class="stat-cell-val" style="color:#38bdf8;">50</div>
+                    </div>
+                    <div class="stat-cell">
+                        <div class="stat-cell-label">Durata</div>
+                        <div id="goDuration" class="stat-cell-val" style="color:#4ade80;">0.0s</div>
+                    </div>
+                </div>
+
+                <!-- Inserimento e modifica nome giocatore in classifica -->
+                <div style="display:flex;align-items:center;gap:6px;background:rgba(30,41,59,0.8);padding:7px 9px;border-radius:8px;border:2px solid #334155;">
+                    <label for="playerNameInput" style="font-size:10px;font-weight:900;color:#cbd5e1;white-space:nowrap;">NOME:</label>
+                    <input id="playerNameInput" type="text" maxlength="14" value="NICO" style="flex:1;min-width:0;background:#0f172a;color:#fef08a;border:2px solid #475569;border-radius:6px;padding:5px 8px;font-family:inherit;font-size:11px;font-weight:900;outline:none;">
+                    <button id="saveScoreBtn" type="button" class="px-btn" style="padding:6px 10px;font-size:10px;background:#22c55e;color:#052e16;">Salva</button>
+                </div>
+
+                <div style="font-size:11px;font-weight:900;color:#e2e8f0;">Classifica Top</div>
+                <div id="gameOverLeaderboardBox" style="max-height:126px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;"></div>
+
+                <div style="display:flex;gap:8px;margin-top:2px;">
+                    <button id="goToMenuBtn" type="button" class="px-btn" style="flex:1;padding:11px;font-size:12px;background:#1e293b;color:#f8fafc;border-color:#94a3b8;">
+                        Menu
+                    </button>
+                    <button id="retryBtn" type="button" class="px-btn" style="flex:1.4;padding:11px;font-size:13px;background:#fde047;color:#0f172a;">
+                        ↻ Rigioca
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modale Classifica -->
+        <div id="leaderboardModal" class="modal-backdrop hidden">
+            <div class="px-panel modal-card">
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <div>
+                        <h2 style="margin:0;font-size:18px;font-weight:900;">🏆 CLASSIFICA</h2>
+                        <div style="font-size:10px;color:#94a3b8;">Salvata in locale (localStorage)</div>
+                    </div>
+                    <button id="closeLeaderboardBtn" type="button" class="px-btn" style="padding:6px 10px;font-size:12px;background:#334155;color:#ffffff;border-color:#94a3b8;">
+                        ✕
+                    </button>
+                </div>
+
+                <div id="leaderboardList"></div>
+
+                <div style="display:flex;gap:8px;margin-top:4px;">
+                    <button id="clearLeaderboardBtn" type="button" class="px-btn" style="padding:10px 12px;font-size:11px;background:#450a0a;color:#fca5a5;border-color:#f87171;">
+                        Svuota
+                    </button>
+                    <button id="okLeaderboardBtn" type="button" class="px-btn" style="flex:1;padding:10px;font-size:13px;background:#fde047;color:#0f172a;">
+                        Chiudi
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        'use strict';
+
+        // =========================================================================
+        // COSTANTI E CONFIGURAZIONE PIXEL ART 9:16
+        // =========================================================================
+        const LEADERBOARD_STORAGE_KEY = 'nico_settimana_bianca_px_scores_v2';
+        const PLAYER_NAME_STORAGE_KEY = 'nico_settimana_bianca_player_name_v2';
+
+        // Griglia logica ad alta densità (9:16) per sprite e scenari nitidi
+        const PX_W = 216;
+        const PX_H = 384;
+
+        const canvas = document.getElementById('pixelCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Riferimenti UI
+        const audioToggleBtn = document.getElementById('audioToggleBtn');
+        const audioIcon = document.getElementById('audioIcon');
+        const audioText = document.getElementById('audioText');
+
+        const menuOverlay = document.getElementById('menuOverlay');
+        const hudOverlay = document.getElementById('hudOverlay');
+        const bpmFlashOverlay = document.getElementById('bpmFlashOverlay');
+        const bpmBanner = document.getElementById('bpmBanner');
+        const bpmBannerVal = document.getElementById('bpmBannerVal');
+
+        const hudScore = document.getElementById('hudScore');
+        const hudBpm = document.getElementById('hudBpm');
+        const pip1 = document.getElementById('pip1');
+        const pip2 = document.getElementById('pip2');
+        const pip3 = document.getElementById('pip3');
+
+        const countdownCenter = document.getElementById('countdownCenter');
+        const countdownText = document.getElementById('countdownText');
+
+        const rhythmDock = document.getElementById('rhythmDock');
+        const rhythmFeedback = document.getElementById('rhythmFeedback');
+        const beatBar = document.getElementById('beatBar');
+        const tapActionBtn = document.getElementById('tapActionBtn');
+
+        const gameOverModal = document.getElementById('gameOverModal');
+        const gameOverReason = document.getElementById('gameOverReason');
+        const goScore = document.getElementById('goScore');
+        const goMaxBpm = document.getElementById('goMaxBpm');
+        const goDuration = document.getElementById('goDuration');
+        const playerNameInput = document.getElementById('playerNameInput');
+        const saveScoreBtn = document.getElementById('saveScoreBtn');
+        const gameOverLeaderboardBox = document.getElementById('gameOverLeaderboardBox');
+
+        const leaderboardModal = document.getElementById('leaderboardModal');
+        const leaderboardList = document.getElementById('leaderboardList');
+
+        /**
+         * Inizializza il canvas sulla griglia 216x384 con imageSmoothingEnabled = false
+         * per garantire pixel netti senza sfocature.
+         */
+        function initPixelCanvas() {
+            try {
+                canvas.width = PX_W;
+                canvas.height = PX_H;
+                ctx.imageSmoothingEnabled = false;
+                ctx.mozImageSmoothingEnabled = false;
+                ctx.webkitImageSmoothingEnabled = false;
+                ctx.msImageSmoothingEnabled = false;
+            } catch (err) {
+                console.warn('Errore inizializzazione canvas:', err);
+            }
+        }
+
+        // =========================================================================
+        // STATO DEL GIOCO
+        // =========================================================================
+        const state = {
+            mode: 'MENU', // 'MENU' | 'COUNTDOWN' | 'PLAYING' | 'GAME_OVER'
+            countdownStep: 3,
+            countdownTimer: 0,
+            bpm: 50,
+            maxBpm: 50,
+            nextBpmTimer: 3.5,
+            mistakes: 0,
+            maxMistakes: 3,
+            score: 0,
+            elapsedSeconds: 0,
+            lastSavedEntry: null,
+            scrollPx: 0,
+            animFrameIdx: 0,
+            animAccum: 0,
+            beatPulseTimer: 0,
+            sniffTimer: 0,
+            impulses: [],
+            impulseSpawnTimer: 0,
+            dustParticles: [],
+            feedbackTimeout: null,
+            bannerTimeout: null,
+            lastTs: null
+        };
+
+        function randomBpmInterval() {
+            return 3 + Math.random() * 2; // Tra 3.0 e 5.0 secondi
+        }
+
+        function formatNowDate() {
+            const d = new Date();
+            const p = (n) => String(n).padStart(2, '0');
+            return `${p(d.getDate())}/${p(d.getMonth() + 1)} ${p(d.getHours())}:${p(d.getMinutes())}`;
+        }
+
+        function loadSavedPlayerName() {
+            try {
+                const saved = localStorage.getItem(PLAYER_NAME_STORAGE_KEY);
+                if (saved && saved.trim()) {
+                    playerNameInput.value = saved.trim().toUpperCase().slice(0, 14);
+                }
+            } catch (_) {}
+        }
+
+        function persistPlayerName(name) {
+            try {
+                localStorage.setItem(PLAYER_NAME_STORAGE_KEY, name);
+            } catch (_) {}
+        }
+
+        // =========================================================================
+        // SINTESI AUDIO WEB AUDIO API (NESSUN FILE ESTERNO)
+        // =========================================================================
+        const sound = {
+            ctx: null,
+            muted: false,
+            loopType: null,
+            timerId: null,
+
+            unlock() {
+                try {
+                    if (!this.ctx) {
+                        const Ctx = window.AudioContext || window.webkitAudioContext;
+                        if (Ctx) this.ctx = new Ctx();
+                    }
+                    if (this.ctx && this.ctx.state === 'suspended') {
+                        this.ctx.resume().catch(() => {});
+                    }
+                } catch (_) {}
+            },
+
+            setMuted(flag) {
+                this.muted = Boolean(flag);
+                audioIcon.textContent = this.muted ? '🔇' : '🔊';
+                audioText.textContent = this.muted ? 'Audio OFF' : 'Audio ON';
+
+                if (this.muted) {
+                    this.stopLoop();
+                } else {
+                    this.unlock();
+                    if (state.mode === 'MENU') {
+                        this.startMenuMusic();
+                    } else if (state.mode === 'PLAYING') {
+                        this.startSprintMusic();
+                    }
+                }
+            },
+
+            toggle() {
+                this.setMuted(!this.muted);
+            },
+
+            stopLoop() {
+                this.loopType = null;
+                if (this.timerId) {
+                    clearInterval(this.timerId);
+                    this.timerId = null;
+                }
+            },
+
+            startMenuMusic() {
+                if (this.muted) return;
+                this.unlock();
+                if (this.loopType === 'MENU' && this.timerId) return;
+                this.stopLoop();
+                this.loopType = 'MENU';
+
+                const notes = [440, 523.25, 659.25, 523.25, 493.88, 587.33, 783.99, 659.25];
+                let step = 0;
+
+                const tick = () => {
+                    if (this.muted || state.mode !== 'MENU' || !this.ctx) return;
+                    try {
+                        const now = this.ctx.currentTime;
+                        const osc = this.ctx.createOscillator();
+                        const gain = this.ctx.createGain();
+                        osc.type = 'square';
+                        osc.frequency.setValueAtTime(notes[step % notes.length], now);
+                        gain.gain.setValueAtTime(0.001, now);
+                        gain.gain.exponentialRampToValueAtTime(0.025, now + 0.015);
+                        gain.gain.exponentialRampToValueAtTime(0.0008, now + 0.22);
+                        osc.connect(gain);
+                        gain.connect(this.ctx.destination);
+                        osc.start(now);
+                        osc.stop(now + 0.23);
+                        step++;
+                    } catch (_) {}
+                };
+
+                tick();
+                this.timerId = setInterval(tick, 270);
+            },
+
+            startSprintMusic() {
+                if (this.muted) return;
+                this.unlock();
+                if (this.loopType === 'SPRINT' && this.timerId) return;
+                this.stopLoop();
+                this.loopType = 'SPRINT';
+
+                const lead = [587.33, 783.99, 987.77, 1174.66, 987.77, 880.0, 987.77, 1318.51];
+                const bass = [146.83, 196.0, 220.0, 196.0];
+                let step = 0;
+
+                const tick = () => {
+                    if (this.muted || state.mode !== 'PLAYING' || !this.ctx) return;
+                    try {
+                        const now = this.ctx.currentTime;
+                        const osc = this.ctx.createOscillator();
+                        const gain = this.ctx.createGain();
+                        osc.type = 'square';
+                        osc.frequency.setValueAtTime(lead[step % lead.length], now);
+                        gain.gain.setValueAtTime(0.001, now);
+                        gain.gain.exponentialRampToValueAtTime(0.032, now + 0.01);
+                        gain.gain.exponentialRampToValueAtTime(0.0008, now + 0.11);
+                        osc.connect(gain);
+                        gain.connect(this.ctx.destination);
+                        osc.start(now);
+                        osc.stop(now + 0.115);
+
+                        if (step % 2 === 0) {
+                            const bOsc = this.ctx.createOscillator();
+                            const bGain = this.ctx.createGain();
+                            bOsc.type = 'triangle';
+                            bOsc.frequency.setValueAtTime(bass[(step / 2) % bass.length], now);
+                            bGain.gain.setValueAtTime(0.055, now);
+                            bGain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+                            bOsc.connect(bGain);
+                            bGain.connect(this.ctx.destination);
+                            bOsc.start(now);
+                            bOsc.stop(now + 0.145);
+                        }
+                        step++;
+                    } catch (_) {}
+                };
+
+                tick();
+                this.timerId = setInterval(tick, 125);
+            },
+
+            // Suono sintetizzato tipo cancelletto di partenza per 3, 2, 1 e VAI!
+            playStartingGate(isGo = false) {
+                if (this.muted) return;
+                this.unlock();
+                if (!this.ctx) return;
+                try {
+                    const now = this.ctx.currentTime;
+                    const dur = isGo ? 0.25 : 0.1;
+                    const len = Math.floor(this.ctx.sampleRate * dur);
+                    const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+                    const ch = buf.getChannelData(0);
+                    for (let i = 0; i < len; i++) {
+                        const gate = Math.sin(i * 0.48) > 0 ? 1 : -1;
+                        ch[i] = gate * Math.exp(-i / (len * 0.28));
+                    }
+
+                    const src = this.ctx.createBufferSource();
+                    src.buffer = buf;
+
+                    const filter = this.ctx.createBiquadFilter();
+                    filter.type = 'bandpass';
+                    filter.frequency.setValueAtTime(isGo ? 2600 : 1700, now);
+                    filter.Q.value = 3.2;
+
+                    const gain = this.ctx.createGain();
+                    gain.gain.setValueAtTime(isGo ? 0.34 : 0.26, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+
+                    src.connect(filter);
+                    filter.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    src.start(now);
+
+                    const osc = this.ctx.createOscillator();
+                    const oGain = this.ctx.createGain();
+                    osc.type = 'square';
+                    osc.frequency.setValueAtTime(isGo ? 880 : 523.25, now);
+                    if (isGo) {
+                        osc.frequency.setValueAtTime(1318.5, now + 0.08);
+                    }
+                    oGain.gain.setValueAtTime(isGo ? 0.12 : 0.085, now);
+                    oGain.gain.exponentialRampToValueAtTime(0.001, now + (isGo ? 0.22 : 0.11));
+                    osc.connect(oGain);
+                    oGain.connect(this.ctx.destination);
+                    osc.start(now);
+                    osc.stop(now + (isGo ? 0.23 : 0.12));
+                } catch (_) {}
+            },
+
+            // Effetto "sniff" marcato sopra la musica sugli incrementi di BPM
+            playSniff() {
+                if (this.muted) return;
+                this.unlock();
+                if (!this.ctx) return;
+                try {
+                    const t0 = this.ctx.currentTime;
+                    const bursts = [0, 0.14];
+                    bursts.forEach((offset, idx) => {
+                        const start = t0 + offset;
+                        const dur = 0.17;
+                        const samples = Math.floor(this.ctx.sampleRate * dur);
+                        const buffer = this.ctx.createBuffer(1, samples, this.ctx.sampleRate);
+                        const data = buffer.getChannelData(0);
+                        for (let i = 0; i < samples; i++) {
+                            const env = Math.pow(Math.sin((i / samples) * Math.PI), 0.7);
+                            data[i] = (Math.random() * 2 - 1) * env;
+                        }
+
+                        const noise = this.ctx.createBufferSource();
+                        noise.buffer = buffer;
+
+                        const bp = this.ctx.createBiquadFilter();
+                        bp.type = 'bandpass';
+                        const fStart = idx === 0 ? 1350 : 1700;
+                        bp.frequency.setValueAtTime(fStart, start);
+                        bp.frequency.exponentialRampToValueAtTime(fStart * 2.1, start + dur);
+                        bp.Q.value = 3.5;
+
+                        const gain = this.ctx.createGain();
+                        gain.gain.setValueAtTime(0.68, start);
+                        gain.gain.exponentialRampToValueAtTime(0.002, start + dur);
+
+                        noise.connect(bp);
+                        bp.connect(gain);
+                        gain.connect(this.ctx.destination);
+                        noise.start(start);
+                    });
+                } catch (_) {}
+            },
+
+            playHit() {
+                if (this.muted) return;
+                this.unlock();
+                if (!this.ctx) return;
+                try {
+                    const now = this.ctx.currentTime;
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'square';
+                    osc.frequency.setValueAtTime(587.33, now);
+                    osc.frequency.setValueAtTime(880, now + 0.04);
+                    gain.gain.setValueAtTime(0.08, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(now);
+                    osc.stop(now + 0.095);
+                } catch (_) {}
+            },
+
+            playError(isGameOver = false) {
+                if (this.muted) return;
+                this.unlock();
+                if (!this.ctx) return;
+                try {
+                    const now = this.ctx.currentTime;
+                    const freqs = isGameOver ? [311.13, 233.08, 155.56] : [207.65, 138.59];
+                    freqs.forEach((f, i) => {
+                        const osc = this.ctx.createOscillator();
+                        const gain = this.ctx.createGain();
+                        osc.type = 'sawtooth';
+                        osc.frequency.setValueAtTime(f, now + i * 0.085);
+                        gain.gain.setValueAtTime(0.1, now + i * 0.085);
+                        gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.085 + 0.1);
+                        osc.connect(gain);
+                        gain.connect(this.ctx.destination);
+                        osc.start(now + i * 0.085);
+                        osc.stop(now + i * 0.085 + 0.11);
+                    });
+                } catch (_) {}
+            }
+        };
+
+        // =========================================================================
+        // CLASSIFICA PERSISTENTE IN LOCALSTORAGE
+        // =========================================================================
+        function readLeaderboard() {
+            try {
+                const raw = localStorage.getItem(LEADERBOARD_STORAGE_KEY);
+                if (!raw) return [];
+                const data = JSON.parse(raw);
+                return Array.isArray(data) ? data : [];
+            } catch (_) {
+                return [];
+            }
+        }
+
+        function saveLeaderboardEntry(entry) {
+            try {
+                const list = readLeaderboard();
+                list.push(entry);
+                list.sort((a, b) => {
+                    if (b.score !== a.score) return b.score - a.score;
+                    if (b.maxBpm !== a.maxBpm) return b.maxBpm - a.maxBpm;
+                    return b.duration - a.duration;
+                });
+                localStorage.setItem(LEADERBOARD_STORAGE_KEY, JSON.stringify(list.slice(0, 20)));
+            } catch (_) {}
+        }
+
+        function clearLeaderboard() {
+            try {
+                localStorage.removeItem(LEADERBOARD_STORAGE_KEY);
+            } catch (_) {}
+        }
+
+        function renderLeaderboardRows(targetContainer, limit = 20) {
+            const list = readLeaderboard().slice(0, limit);
+            if (!list.length) {
+                targetContainer.innerHTML = `
+                    <div style="text-align:center;padding:16px 10px;color:#94a3b8;font-size:11px;border:2px dashed #334155;border-radius:8px;">
+                        Nessun punteggio salvato.<br>Gioca una partita per registrare un record!
+                    </div>
+                `;
+                return;
+            }
+
+            targetContainer.innerHTML = list.map((item, idx) => {
+                const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`;
+                const playerLabel = item.name ? `<span style="color:#f8fafc;font-weight:900;margin-right:4px;">${escapeHtml(item.name)}</span>` : '';
+                return `
+                    <div class="lb-row">
+                        <span class="lb-rank">${medal}</span>
+                        <div class="lb-main">
+                            <div class="lb-score">${playerLabel}${item.score} PT</div>
+                            <div class="lb-meta">Max ${item.maxBpm} BPM • ${Number(item.duration).toFixed(1)}s • ${item.date}</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function escapeHtml(str) {
+            return String(str).replace(/[&<>"']/g, (ch) => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            }[ch]));
+        }
+
+        // =========================================================================
+        // SPRITE MATRICIALE 1:1 (59x35) ESTRATTA DALL'IMMAGINE CARICATA
+        // =========================================================================
+        const SPRITE_PALETTE = {
+            '.': null,
+            'K': '#040404', // Contorno nero e righe scure
+            'B': '#191919', // Pantaloni neri
+            'S': '#321a09', // Stivaletti marrone scuro
+            'W': '#f5f5f5', // Maglia bianca e bianco occhio
+            'L': '#c4c3b4', // Ombra chiara maglia e riflessi
+            'G': '#949180', // Sfumature chiare capelli / ombreggio
+            'Y': '#d9c004', // Capelli biondi
+            'A': '#9a870c', // Capelli biondi ombra
+            'F': '#dea06a', // Incarnato base
+            'E': '#a87f59', // Incarnato ombra
+            'M': '#7a3a39'  // Bocca
+        };
+
+        /**
+         * Riproduzione 1:1 della sprite caricata (59 colonne x 35 righe).
+         */
+        const EXACT_CHARACTER_MATRIX = [
+            '....................KKKKKK.................................',
+            '..................KKBBBBBBKK...............................',
+            '.................KBBBBBBBBBKK..............................',
+            '................KKBBBBBBBBBBKK.............................',
+            '................KBBBBBBBBBBBBK.............................',
+            '................KBBBBBBBBBBBKKK............................',
+            '...............KBBBBBBBBBBBKWWK............................',
+            '...............KBBBBBBBBBKKWWWWK...........................',
+            '...............KBBBBBBBBKBWWWWKK...........................',
+            '..............KBBBBBBBBBKWWWKKWWK..........................',
+            '..............KBBBBBBBBKLWWKKWWWK..........................',
+            '..............KBBBBBBBBKLLKWWWWKKK.........................',
+            '.............KBBBBBBBBKKLKLWWKKWWWK........................',
+            '.............KBBBBBBBKKKKLLWKWWWWKKK.......................',
+            '............KBBBBBBBBKBBKLLKWWWKKWWWK......................',
+            '............KBBBBBBBKKBBBKKLLWKWWWWKKK.....................',
+            '............KBBBBBBBKBBBBKLLLKWWWWKKWWK....................',
+            '...........KBBBBBBBKBBBBBBKLKLWWKKWWWWWK...................',
+            '..........KBBBBBBBKKBBBBBBKKLLLKWWWWWWKK...................',
+            '.........KBBBBBBBKWKBBBBBBKKLKKLWWWKKKWKK...KKKKKKK........',
+            '........KBBBBBBBKKWKBBBBBBKKKKLLKKKKWWWWK.KKGYYYYYYKK......',
+            '.......KBBBBBBBKK.KBBBBBBKWKKKKKWWKWWWWWKKAAAGGLLYYYYKK....',
+            '......KBBBBBBBKK..KBBBBBKKKWKWWKWWKWWWLKKAAGGYYYYYYYLYYK...',
+            '.....KBBBBBBKK...KBBBBBBKWWWKWWKWWKWWLKAAAYYKKKKYYYYYLYYK..',
+            '....KBBBBBBKK....KBBBBBKKWWWWKLKLLKLLLKAGYKKEFFKAYGYYYLYK..',
+            '..KKBBBBBBKK....KBBBBBK.KWWWWLKKKKKKKKAAAKEFFFFEKAGGYYYYYK.',
+            '.KSSKBBBBK......KBBBBBK..KKKKKKWWWWKAKAAKEFFFFFFEKAYLYYYGK.',
+            'KSSSSKBBK......KBBBBBK....KWWWLKWWKAKAAKEFFFFFFFFEKAYLYGLK.',
+            'KSSSSSKK......KBBBBBK......KWWWKKWKKAGAKFFFFFFFFFFEKAYLGYK.',
+            '.KSSSSK.......KKBBBK........KKKWKKKAAGAKFFFMFFEKFEFEKAGGYK.',
+            '..KSSSK......KSBKKKK.........KWWWKAAGAAKFFMFFFEWMFGFEKGYYK.',
+            '..KSSSSK.....KSSSSSSKK.......KKWKKKKKAAKFFMFFFEKMFGFEKLYYK.',
+            '...KSSSBK....KSSSBSSSBKK......KKEFFFFKKKEFMFEFFFFFFEKGYYKYK',
+            '....KKKKK....KKKKSSSSSBK........KKFFFFFKKKKKKFFKKKKKAYYYYYK',
+            '.................KKKKKKK.........KKKKKKKKKKKKKKKKKKKKKKKKK.'
+        ];
+
+        function pxRect(x, y, w, h, color) {
+            ctx.fillStyle = color;
+            ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h));
+        }
+
+        function drawSpriteMatrix(matrix, ox, oy) {
+            for (let r = 0; r < matrix.length; r++) {
+                const row = matrix[r];
+                for (let c = 0; c < row.length; c++) {
+                    const color = SPRITE_PALETTE[row[c]];
+                    if (color) {
+                        ctx.fillStyle = color;
+                        ctx.fillRect(ox + c, oy + r, 1, 1);
+                    }
+                }
+            }
+        }
+
+        /**
+         * Disegna l'ufficio in pixel art 9:16 a strati/parallasse con scorrimento
+         * verso sinistra per far avanzare il personaggio verso destra.
+         */
+        function drawPixelOffice() {
+            const wallH = 132;
+            const floorY = 144;
+            const stripY = 279;
+
+            // Parete chiara d'ufficio
+            pxRect(0, 0, PX_W, wallH, '#e2e8f0');
+            pxRect(0, 0, PX_W, 12, '#cbd5e1');
+
+            // Plafoniere fluorescenti (parallasse 0.35x verso sinistra -> corsa verso destra)
+            const lampPeriod = 96;
+            const lampOffset = -(Math.floor(state.scrollPx * 0.35) % lampPeriod);
+            for (let x = lampOffset - lampPeriod; x < PX_W + lampPeriod; x += lampPeriod) {
+                pxRect(x + 18, 12, 54, 9, '#64748b');
+                pxRect(x + 22, 15, 46, 4, '#ffffff');
+            }
+
+            // Scaffali con faldoni e piante in vaso (parallasse 0.65x verso sinistra)
+            const shelfPeriod = 144;
+            const shelfOffset = -(Math.floor(state.scrollPx * 0.65) % shelfPeriod);
+            const folderColors = ['#ef4444', '#3b82f6', '#eab308', '#22c55e', '#f97316'];
+
+            for (let x = shelfOffset - shelfPeriod; x < PX_W + shelfPeriod; x += shelfPeriod) {
+                pxRect(x + 9, 54, 54, 6, '#94a3b8');
+                pxRect(x + 9, 81, 54, 6, '#94a3b8');
+                pxRect(x + 9, 54, 4, 36, '#64748b');
+                pxRect(x + 59, 54, 4, 36, '#64748b');
+
+                for (let f = 0; f < 4; f++) {
+                    pxRect(x + 16 + f * 9, 39, 6, 15, folderColors[(Math.abs(Math.floor((x + shelfPeriod) / shelfPeriod)) + f) % folderColors.length]);
+                    pxRect(x + 16 + f * 9, 66, 6, 15, folderColors[(f + 2) % folderColors.length]);
+                }
+
+                // Pianta in vaso sulla parete
+                pxRect(x + 81, 66, 15, 15, '#c2410c');
+                pxRect(x + 80, 63, 18, 4, '#ea580c');
+                pxRect(x + 81, 51, 6, 12, '#16a34a');
+                pxRect(x + 88, 48, 6, 15, '#22c55e');
+                pxRect(x + 84, 45, 7, 7, '#4ade80');
+            }
+
+            // Battiscopa
+            pxRect(0, wallH, PX_W, 12, '#475569');
+
+            // Pavimento scorrevole (1.0x verso sinistra -> corsa verso destra)
+            pxRect(0, floorY, PX_W, PX_H - floorY, '#94a3b8');
+            const tileW = 36;
+            const tileH = 24;
+            const tileShiftX = -(Math.floor(state.scrollPx) % tileW);
+
+            for (let row = 0; row < Math.ceil((PX_H - floorY) / tileH); row++) {
+                const ty = floorY + row * tileH;
+                for (let col = -1; col <= Math.ceil(PX_W / tileW) + 1; col++) {
+                    const tx = col * tileW + tileShiftX;
+                    const even = (row + col + Math.floor(state.scrollPx / tileW)) % 2 === 0;
+                    pxRect(tx, ty, tileW, tileH, even ? '#cbd5e1' : '#b8c4d4');
+                    pxRect(tx, ty, tileW, 1, '#64748b');
+                    pxRect(tx, ty, 1, tileH, '#64748b');
+                }
+            }
+
+            // Scrivanie con monitor e piante in vaso (parallasse 0.85x verso sinistra)
+            const deskPeriod = 168;
+            const deskOffset = -(Math.floor(state.scrollPx * 0.85) % deskPeriod);
+            for (let x = deskOffset - deskPeriod; x < PX_W + deskPeriod; x += deskPeriod) {
+                pxRect(x + 21, floorY + 12, 54, 21, '#78350f');
+                pxRect(x + 21, floorY + 12, 54, 6, '#b45309');
+                pxRect(x + 24, floorY + 33, 6, 12, '#451a03');
+                pxRect(x + 66, floorY + 33, 6, 12, '#451a03');
+
+                // Monitor acceso
+                pxRect(x + 36, floorY - 6, 24, 16, '#1e293b');
+                pxRect(x + 39, floorY - 3, 18, 10, '#38bdf8');
+                pxRect(x + 45, floorY + 10, 6, 3, '#475569');
+
+                // Pianta in vaso a terra
+                pxRect(x + 99, floorY + 21, 15, 13, '#9a3412');
+                pxRect(x + 97, floorY + 18, 18, 4, '#c2410c');
+                pxRect(x + 97, floorY + 7, 6, 11, '#15803d');
+                pxRect(x + 105, floorY + 4, 6, 14, '#22c55e');
+                pxRect(x + 102, floorY + 1, 7, 6, '#4ade80');
+            }
+
+            // Sottile linea bianca ("neve") sul pavimento
+            pxRect(0, stripY, PX_W, 2, '#ffffff');
+            pxRect(0, stripY + 2, PX_W, 1, 'rgba(255, 255, 255, 0.45)');
+        }
+
+        function drawPixelCharacter() {
+            const stripY = 279;
+            const ox = 75;
+            const stepBounce = (state.animFrameIdx % 2 === 1) ? -1 : 0;
+            const oy = stripY - 34 + stepBounce + (state.beatPulseTimer > 0 ? -1 : 0) + (state.sniffTimer > 0 ? 1 : 0);
+
+            // Ombra a terra sotto la protagonista
+            pxRect(ox + 2, stripY + 2, 55, 3, 'rgba(15, 23, 42, 0.34)');
+
+            drawSpriteMatrix(EXACT_CHARACTER_MATRIX, ox, oy);
+        }
+
+        function drawPixelParticles(dt) {
+            for (let i = state.dustParticles.length - 1; i >= 0; i--) {
+                const p = state.dustParticles[i];
+                p.life -= dt;
+                if (p.life <= 0) {
+                    state.dustParticles.splice(i, 1);
+                    continue;
+                }
+                p.x += p.vx * dt;
+                p.y += p.vy * dt;
+                pxRect(p.x, p.y, 2, 2, '#ffffff');
+            }
+        }
+
+        function renderScene(dt) {
+            ctx.clearRect(0, 0, PX_W, PX_H);
+            drawPixelOffice();
+            drawPixelCharacter();
+            drawPixelParticles(dt);
+        }
+
+        // =========================================================================
+        // GESTIONE HUD, ERRORI, BPM E MACCHINA A STATI
+        // =========================================================================
+        function syncHud() {
+            hudScore.textContent = `${state.score}`;
+            hudBpm.textContent = `${state.bpm} BPM`;
+
+            const pips = [pip1, pip2, pip3];
+            pips.forEach((pip, idx) => {
+                if (idx < state.mistakes) {
+                    pip.classList.add('used');
+                } else {
+                    pip.classList.remove('used');
+                }
+            });
+        }
+
+        function showFeedback(msg, color = '#e2e8f0') {
+            rhythmFeedback.textContent = msg;
+            rhythmFeedback.style.color = color;
+            if (state.feedbackTimeout) clearTimeout(state.feedbackTimeout);
+            state.feedbackTimeout = setTimeout(() => {
+                rhythmFeedback.textContent = 'Verde = +300 • Giallo = +150 • Rosso = +50';
+                rhythmFeedback.style.color = '#e2e8f0';
+            }, 650);
+        }
+
+        function clearImpulseElements() {
+            state.impulses.forEach((imp) => {
+                if (imp.el && imp.el.parentNode) {
+                    imp.el.parentNode.removeChild(imp.el);
+                }
+            });
+            state.impulses = [];
+        }
+
+        function spawnBeatImpulse() {
+            const el = document.createElement('div');
+            el.className = 'beat-impulse';
+            el.style.left = '100%';
+            beatBar.appendChild(el);
+
+            state.impulses.push({
+                pos: 1.0,
+                hit: false,
+                missed: false,
+                el
+            });
+        }
+
+        /**
+         * Incrementa il BPM di +10 ogni intervallo casuale (3-5s):
+         * avviso visivo (banner + flash leggero) + suono "sniff" sopra la musica.
+         */
+        function applyPlus10Bpm() {
+            state.bpm += 10;
+            if (state.bpm > state.maxBpm) {
+                state.maxBpm = state.bpm;
+            }
+            state.nextBpmTimer = randomBpmInterval();
+            state.sniffTimer = 0.35;
+
+            bpmBannerVal.textContent = `${state.bpm} BPM`;
+            bpmBanner.classList.remove('hidden');
+            bpmBanner.classList.remove('bpm-banner-active');
+            void bpmBanner.offsetWidth;
+            bpmBanner.classList.add('bpm-banner-active');
+
+            bpmFlashOverlay.classList.remove('bpm-flash-active');
+            void bpmFlashOverlay.offsetWidth;
+            bpmFlashOverlay.classList.add('bpm-flash-active');
+
+            sound.playSniff();
+            syncHud();
+
+            if (state.bannerTimeout) clearTimeout(state.bannerTimeout);
+            state.bannerTimeout = setTimeout(() => {
+                bpmBanner.classList.add('hidden');
+            }, 1150);
+        }
+
+        function registerMistake(reason) {
+            if (state.mode !== 'PLAYING') return;
+            state.mistakes += 1;
+            syncHud();
+
+            if (state.mistakes >= state.maxMistakes) {
+                enterGameOver(`${reason} (3/3 errori)`);
+                return;
+            }
+
+            sound.playError(false);
+            const left = state.maxMistakes - state.mistakes;
+            showFeedback(`${reason} (${left} error${left === 1 ? 'e' : 'i'} rimast${left === 1 ? 'o' : 'i'})`, '#f87171');
+            beatBar.classList.add('error-flash');
+            setTimeout(() => beatBar.classList.remove('error-flash'), 220);
+        }
+
+        /**
+         * Valuta il colpo del giocatore sull'impulso più vicino al centro (0.50):
+         * - Zona VERDE centrale (distanza <= 0.09): punteggio massimo (+300 base)
+         * - Zona GIALLA intermedia (distanza <= 0.20): punteggio medio (+150 base)
+         * - Zona ROSSA esterna (distanza <= 0.34): punteggio minimo al limite (+50 base)
+         * - Fuori zona: errore (max 3 errori)
+         */
+        function handleRhythmTap() {
+            if (state.mode !== 'PLAYING') return;
+            sound.unlock();
+
+            const center = 0.50;
+            const greenHalfWidth = 0.09;
+            const yellowHalfWidth = 0.20;
+            const redHalfWidth = 0.34;
+
+            let best = null;
+            let bestDist = Infinity;
+
+            for (const imp of state.impulses) {
+                if (imp.hit || imp.missed) continue;
+                const d = Math.abs(imp.pos - center);
+                if (d < bestDist) {
+                    bestDist = d;
+                    best = imp;
+                }
+            }
+
+            if (best && bestDist <= redHalfWidth) {
+                best.hit = true;
+                best.el.classList.add('hit');
+
+                const bpmMult = 1 + (state.bpm - 50) * 0.05;
+                let basePts = 50;
+                let label = 'AL LIMITE';
+                let color = '#f87171';
+                let dustCount = 2;
+
+                if (bestDist <= greenHalfWidth) {
+                    basePts = 300;
+                    label = 'PERFETTO!';
+                    color = '#4ade80';
+                    dustCount = 7;
+                } else if (bestDist <= yellowHalfWidth) {
+                    basePts = 150;
+                    label = 'BUONO';
+                    color = '#fde047';
+                    dustCount = 4;
+                }
+
+                const pts = Math.round(basePts * bpmMult);
+                state.score += pts;
+                state.beatPulseTimer = 0.14;
+                state.animFrameIdx = (state.animFrameIdx + 1) % 4;
+
+                for (let i = 0; i < dustCount; i++) {
+                    state.dustParticles.push({
+                        x: 118 + (Math.random() - 0.5) * 10,
+                        y: 278,
+                        vx: -38 - Math.random() * 52,
+                        vy: -18 - Math.random() * 30,
+                        life: 0.35 + Math.random() * 0.15
+                    });
+                }
+
+                sound.playHit();
+                showFeedback(`${label} +${pts}`, color);
+                syncHud();
+            } else {
+                registerMistake('Fuori zona!');
+            }
+        }
+
+        function goToMenu() {
+            state.mode = 'MENU';
+            clearImpulseElements();
+            gameOverModal.classList.add('hidden');
+            leaderboardModal.classList.add('hidden');
+            hudOverlay.classList.add('hidden');
+            rhythmDock.classList.add('hidden');
+            countdownCenter.classList.add('hidden');
+            menuOverlay.classList.remove('hidden');
+
+            if (!sound.muted) {
+                sound.startMenuMusic();
+            }
+        }
+
+        function startCountdownFlow() {
+            sound.unlock();
+            sound.stopLoop();
+            clearImpulseElements();
+
+            state.mode = 'COUNTDOWN';
+            state.countdownStep = 3;
+            state.countdownTimer = 0;
+            state.bpm = 50;
+            state.maxBpm = 50;
+            state.nextBpmTimer = randomBpmInterval();
+            state.mistakes = 0;
+            state.score = 0;
+            state.elapsedSeconds = 0;
+            state.lastSavedEntry = null;
+            saveScoreBtn.disabled = false;
+            saveScoreBtn.textContent = 'Salva';
+            state.impulseSpawnTimer = 0;
+            state.dustParticles = [];
+            state.lastTs = performance.now();
+
+            menuOverlay.classList.add('hidden');
+            gameOverModal.classList.add('hidden');
+            leaderboardModal.classList.add('hidden');
+            bpmBanner.classList.add('hidden');
+
+            hudOverlay.classList.remove('hidden');
+            rhythmDock.classList.add('hidden');
+            countdownCenter.classList.remove('hidden');
+            countdownText.textContent = '3';
+            countdownText.style.color = '#ffffff';
+
+            syncHud();
+            sound.playStartingGate(false);
+        }
+
+        function startPlayingFlow() {
+            state.mode = 'PLAYING';
+            state.nextBpmTimer = randomBpmInterval();
+
+            // Un solo battito all'avvio: il prossimo viene generato dopo un intero intervallo di battuta
+            const beatIntervalSec = Math.max(0.26, 60 / Math.max(50, state.bpm));
+            state.impulseSpawnTimer = beatIntervalSec;
+
+            countdownCenter.classList.add('hidden');
+            rhythmDock.classList.remove('hidden');
+            showFeedback('VAI! Verde = +300 • Giallo = +150 • Rosso = +50', '#4ade80');
+
+            spawnBeatImpulse();
+
+            sound.playStartingGate(true);
+            sound.startSprintMusic();
+        }
+
+        function enterGameOver(reasonText) {
+            if (state.mode === 'GAME_OVER') return;
+            state.mode = 'GAME_OVER';
+            sound.stopLoop();
+            sound.playError(true);
+
+            const cleanName = (playerNameInput.value || 'NICO').trim().toUpperCase().slice(0, 14) || 'NICO';
+            playerNameInput.value = cleanName;
+            persistPlayerName(cleanName);
+
+            const durationSec = Number(state.elapsedSeconds.toFixed(1));
+            const entry = {
+                name: cleanName,
+                score: state.score,
+                maxBpm: state.maxBpm,
+                duration: durationSec,
+                date: formatNowDate()
+            };
+            state.lastSavedEntry = entry;
+            saveLeaderboardEntry(entry);
+
+            gameOverReason.textContent = reasonText || 'Hai commesso 3 errori.';
+            goScore.textContent = `${state.score}`;
+            goMaxBpm.textContent = `${state.maxBpm}`;
+            goDuration.textContent = `${durationSec.toFixed(1)}s`;
+            renderLeaderboardRows(gameOverLeaderboardBox, 5);
+
+            rhythmDock.classList.add('hidden');
+            countdownCenter.classList.add('hidden');
+            gameOverModal.classList.remove('hidden');
+        }
+
+        // =========================================================================
+        // LOOP PRINCIPALE REQUESTANIMATIONFRAME
+        // =========================================================================
+        function loop(ts) {
+            if (!state.lastTs) state.lastTs = ts;
+            const rawDt = (ts - state.lastTs) / 1000;
+            state.lastTs = ts;
+            const dt = Math.min(Math.max(rawDt, 0.001), 0.05);
+
+            try {
+                if (state.beatPulseTimer > 0) {
+                    state.beatPulseTimer = Math.max(0, state.beatPulseTimer - dt);
+                }
+
+                if (state.mode === 'MENU') {
+                    state.scrollPx += 36 * dt;
+                    state.animAccum += dt;
+                    if (state.animAccum >= 0.16) {
+                        state.animAccum -= 0.16;
+                        state.animFrameIdx = (state.animFrameIdx + 1) % 4;
+                    }
+                } else if (state.mode === 'COUNTDOWN') {
+                    state.scrollPx += 18 * dt;
+                    state.countdownTimer += dt;
+
+                    if (state.countdownTimer >= 0.85) {
+                        state.countdownTimer -= 0.85;
+                        state.countdownStep -= 1;
+
+                        if (state.countdownStep === 2) {
+                            countdownText.textContent = '2';
+                            sound.playStartingGate(false);
+                        } else if (state.countdownStep === 1) {
+                            countdownText.textContent = '1';
+                            sound.playStartingGate(false);
+                        } else if (state.countdownStep <= 0) {
+                            countdownText.textContent = 'VAI!';
+                            countdownText.style.color = '#fde047';
+                            startPlayingFlow();
+                        }
+                    }
+                } else if (state.mode === 'PLAYING') {
+                    state.elapsedSeconds += dt;
+
+                    // Incremento casuale di +10 BPM ogni 3-5 secondi
+                    state.nextBpmTimer -= dt;
+                    if (state.nextBpmTimer <= 0) {
+                        applyPlus10Bpm();
+                    }
+
+                    if (state.sniffTimer > 0) {
+                        state.sniffTimer = Math.max(0, state.sniffTimer - dt);
+                    }
+
+                    const speedMult = 1 + (state.bpm - 50) * 0.015;
+                    state.scrollPx += 140 * speedMult * dt;
+
+                    // Ritmo sincronizzato al BPM
+                    const stepPeriod = Math.max(0.06, 60 / Math.max(50, state.bpm) / 4);
+                    state.animAccum += dt * (1 + (state.bpm - 50) * 0.02);
+                    if (state.animAccum >= stepPeriod) {
+                        state.animAccum -= stepPeriod;
+                        state.animFrameIdx = (state.animFrameIdx + 1) % 4;
+                    }
+
+                    // Generazione e movimento degli impulsi sulla barra del battito
+                    const beatIntervalSec = Math.max(0.26, 60 / Math.max(50, state.bpm));
+                    state.impulseSpawnTimer -= dt;
+                    if (state.impulseSpawnTimer <= 0) {
+                        spawnBeatImpulse();
+                        state.impulseSpawnTimer = beatIntervalSec;
+                    }
+
+                    const travelSpeed = 1 / Math.max(0.55, beatIntervalSec * 1.9);
+                    for (let i = state.impulses.length - 1; i >= 0; i--) {
+                        const imp = state.impulses[i];
+                        imp.pos -= travelSpeed * dt;
+                        imp.el.style.left = `${(imp.pos * 100).toFixed(2)}%`;
+
+                        if (!imp.hit && !imp.missed && imp.pos < 0.15) {
+                            imp.missed = true;
+                            imp.el.style.opacity = '0.35';
+                            registerMistake('Battito mancato!');
+                            if (state.mode !== 'PLAYING') break;
+                        }
+
+                        if (imp.pos < -0.08) {
+                            if (imp.el.parentNode) imp.el.parentNode.removeChild(imp.el);
+                            state.impulses.splice(i, 1);
+                        }
+                    }
+
+                    if (state.mode === 'PLAYING') {
+                        syncHud();
+                    }
+                }
+
+                renderScene(dt);
+            } catch (err) {
+                console.warn('Errore nel loop di gioco:', err);
+            }
+
+            requestAnimationFrame(loop);
+        }
+
+        // =========================================================================
+        // EVENTI UI, TASTIERA E TOUCH
+        // =========================================================================
+        function bindEvents() {
+            audioToggleBtn.addEventListener('click', () => {
+                sound.toggle();
+            });
+
+            document.getElementById('playBtn').addEventListener('click', () => {
+                startCountdownFlow();
+            });
+
+            document.getElementById('openLeaderboardMenuBtn').addEventListener('click', () => {
+                renderLeaderboardRows(leaderboardList, 20);
+                leaderboardModal.classList.remove('hidden');
+            });
+
+            document.getElementById('closeLeaderboardBtn').addEventListener('click', () => {
+                leaderboardModal.classList.add('hidden');
+            });
+
+            document.getElementById('okLeaderboardBtn').addEventListener('click', () => {
+                leaderboardModal.classList.add('hidden');
+            });
+
+            document.getElementById('clearLeaderboardBtn').addEventListener('click', () => {
+                clearLeaderboard();
+                renderLeaderboardRows(leaderboardList, 20);
+                if (!gameOverModal.classList.contains('hidden')) {
+                    renderLeaderboardRows(gameOverLeaderboardBox, 5);
+                }
+            });
+
+            document.getElementById('retryBtn').addEventListener('click', () => {
+                startCountdownFlow();
+            });
+
+            document.getElementById('goToMenuBtn').addEventListener('click', () => {
+                goToMenu();
+            });
+
+            saveScoreBtn.addEventListener('click', () => {
+                if (!state.lastSavedEntry) return;
+                const cleanName = (playerNameInput.value || 'NICO').trim().toUpperCase().slice(0, 14) || 'NICO';
+                playerNameInput.value = cleanName;
+                persistPlayerName(cleanName);
+                state.lastSavedEntry.name = cleanName;
+                saveLeaderboardEntry(state.lastSavedEntry);
+                saveScoreBtn.textContent = 'Salvato ✓';
+                renderLeaderboardRows(gameOverLeaderboardBox, 5);
+                renderLeaderboardRows(leaderboardList, 20);
+            });
+
+            let touchedRecently = false;
+
+            tapActionBtn.addEventListener('touchstart', (e) => {
+                touchedRecently = true;
+                e.preventDefault();
+                handleRhythmTap();
+                setTimeout(() => { touchedRecently = false; }, 120);
+            }, { passive: false });
+
+            tapActionBtn.addEventListener('mousedown', (e) => {
+                if (touchedRecently) return;
+                e.preventDefault();
+                handleRhythmTap();
+            });
+
+            beatBar.addEventListener('pointerdown', (e) => {
+                if (state.mode === 'PLAYING') {
+                    e.preventDefault();
+                    handleRhythmTap();
+                }
+            });
+
+            canvas.addEventListener('pointerdown', (e) => {
+                if (state.mode === 'PLAYING') {
+                    e.preventDefault();
+                    handleRhythmTap();
+                }
+            });
+
+            window.addEventListener('keydown', (e) => {
+                if (e.repeat) return;
+                if (state.mode === 'PLAYING' && e.code === 'Space') {
+                    e.preventDefault();
+                    handleRhythmTap();
+                }
+            });
+
+            document.body.addEventListener('pointerdown', () => {
+                if (state.mode === 'MENU' && !sound.muted) {
+                    sound.startMenuMusic();
+                }
+            }, { once: true });
+        }
+
+        function boot() {
+            initPixelCanvas();
+            loadSavedPlayerName();
+            bindEvents();
+            goToMenu();
+            requestAnimationFrame(loop);
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', boot);
+        } else {
+            boot();
+        }
+    </script>
+</body>
+</html>
